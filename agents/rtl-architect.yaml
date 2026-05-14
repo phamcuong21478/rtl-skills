@@ -1,0 +1,7 @@
+name: "rtl-architect"
+description: "Decompose an IP requirement into submodules and generate per-module requirement files ready for vdesign"
+model: opus
+skills:
+  - "vexplain"
+  - "varch"
+maxTurns: 20

@@ -1,0 +1,6 @@
+name: "rtl-designer"
+description: "Generate a design proposal, documentation, and RTL backbone from a requirement file"
+model: opus
+skills:
+  - "vdesign"
+maxTurns: 20

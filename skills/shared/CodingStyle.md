@@ -13,6 +13,10 @@ The following rules must be followed.
 
 - Use begin and end unless the whole statement fits on a single line.
 
+- Always use synchronous reset. If the module has no parameter `RS_LV`, set reset active-low. If it has parameter `RS_LV`, set reset active level as `RS_LV`.
+
+- Blocking/non-blocking assignment rule: always use `<=` in `always @(posedge clk)`, and use `=` in `always @(*)`.
+
 ## Signal Naming
 
 Signal names must follow the format: `[<pipeline_name>_][<pipeline stage>_]<signal_name>[_ff]`
@@ -33,13 +37,13 @@ If the design has pipeline process, you must add `[<pipeline stage>_]` to all na
 - Bus names should be kept as short as possible. Examples: `axi`, `upi`, `ob00`.
 - For input/output ports, use the following prefixes:
   - `s_` for slave interfaces
-  - `m_` for master interfacesfor example, an include path might extend past 100 characters.
+  - `m_` for master interfaces
   - `b_` for monitor interfaces
 - If a bus is used as an internal connection between submodules, its name must follow this format `<master>2<slave>_<bus_name>[_<bus_inst>]`. Where:
   - `<master>` is the abbreviated instance name of the master module and must not exceed 3 characters
   - `<slave>` is the abbreviated instance name of the slave module and must not exceed 3 characters
   - `<bus_name>` is the short name of the bus type
-  - `[_<bus_inst>]` is optionasádl. This field should be used only when more than one bus of the same type connects the same pair of modules, in order to distinguish between them.
+  - `[_<bus_inst>]` is optional. This field should be used only when more than one bus of the same type connects the same pair of modules, in order to distinguish between them.
 
 ## Others
 
@@ -52,14 +56,19 @@ localparam FSM_IDLE   = 'd0,
            FSM_DONE   = 'd2;
 ```
 
+## Language Standard
+
+- Write in Verilog-2001. Do not use SystemVerilog constructs.
+- Use `reg` and `wire` declarations, not `logic`.
+- Use `always @(posedge clk)` and `always @(*)`, not `always_ff` or `always_comb`.
+
 ## Comment
 
 - C++ style comments (`// foo`) are preferred. C style comments (`/* bar */`) can also be used.
 
-- split code section by commend like bellow
+- split code section by comment like below
 ```
 //==============================================================================
 // <code section>
 //==============================================================================
 ```
-

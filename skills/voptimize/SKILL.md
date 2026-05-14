@@ -54,5 +54,5 @@ The design documentation must include:
 ---
 ## Step 2 - Fill in the Verilog Code
 
-Complete the Verilog source file based on the approved proposal and the coding style guidelines defined in `assets/CodingStyle.md`.
+Complete the Verilog source file based on the approved proposal and the coding style guidelines defined in `.claude/skills/shared/CodingStyle.md`.
 

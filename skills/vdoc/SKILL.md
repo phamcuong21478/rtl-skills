@@ -1,0 +1,86 @@
+---
+name: vdoc
+description: Aggregate all per-module documentation into a single comprehensive IP document
+---
+
+# Verilog IP Documenter
+
+## Overview
+
+This guide defines the workflow for collecting all documentation generated during the development process and synthesizing it into a single, comprehensive IP-level document.
+
+The input is the IP name. The output is a single Markdown file `./doc/<ip_name>.md` covering the full IP.
+
+## Step 1 - Collect Documentation Sources
+
+Locate and read all of the following sources for the target IP:
+
+| Source | Location | Content |
+|--------|----------|---------|
+| Requirements | `./ddoc/<module>_req.md` | Original per-module requirements |
+| Proposals | `<module>_proposal.md` (same folder as RTL) | Architecture, algorithm, timing diagrams |
+| Module docs | `./doc/<module>.md` | Per-module interface and functional description |
+| Top-level skeleton | `./rtl/<ip_name>_top.v` | Top-level ports and inter-module wiring |
+| Library module docs | `./lib/**/<module>.md` | Reused library module documentation |
+
+Build a list of all submodules in the IP from the top-level skeleton.
+
+## Step 2 - Detect and Fill Documentation Gaps
+
+For each submodule in the IP:
+
+1. Check whether a documentation file exists in `./doc/` or `./lib/`.
+2. If documentation is missing, use `vexplain` to generate it from the RTL source before proceeding.
+3. If a proposal file is missing but the RTL exists, note it as a gap — do not infer architecture that is not documented.
+
+Do not proceed to Step 3 until all submodules have documentation.
+
+## Step 3 - Generate IP Document
+
+Create the IP document at `./doc/<ip_name>.md`.
+
+### Required Sections
+
+#### 1. IP Overview
+
+- One paragraph describing the IP purpose, target use case, and key features
+- List of all submodules with a one-line description each
+
+#### 2. Architecture
+
+- Block diagram of the IP showing all submodules and their connections, drawn in mermaid format
+- Source: varch proposal or top-level skeleton
+
+#### 3. Top-Level Port Description
+
+- Full port table with columns: Name, Direction, Width, Description
+- Source: `./rtl/<ip_name>_top.v`
+
+#### 4. Inter-Module Interface Table
+
+- One table per interface between submodules
+- Columns: Signal Name, Direction (relative to master), Width, Description
+- Source: varch proposal and top-level skeleton wire declarations
+
+#### 5. Submodule Descriptions
+
+For each submodule, include a condensed summary:
+
+- Purpose (one paragraph)
+- Port table
+- Key functional behavior
+
+Do not copy the full module doc verbatim — summarize to the level useful for IP integration.
+
+#### 6. Integration Guide
+
+- Instantiation example of the top-level module with all ports connected
+- Parameter descriptions and recommended values
+- Any constraints or requirements for correct operation (clock frequency, reset sequence, interface protocol)
+
+### Writing Rules
+
+- Write for an engineer integrating the IP, not for someone implementing it
+- Do not include implementation internals or low-level RTL details
+- Keep submodule summaries concise — link to `./doc/<module>.md` for full detail
+- All block diagrams must use mermaid format

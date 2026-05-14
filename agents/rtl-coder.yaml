@@ -1,0 +1,6 @@
+name: "rtl-coder"
+description: "Implement Verilog code from an approved design proposal, then lint and simulate"
+model: sonnet
+skills:
+  - "vfill"
+maxTurns: 30

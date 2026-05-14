@@ -1,0 +1,7 @@
+name: "rtl-documentation"
+description: "Aggregate all per-module documentation into a single comprehensive IP document"
+model: sonnet
+skills:
+  - "vexplain"
+  - "vdoc"
+maxTurns: 20
