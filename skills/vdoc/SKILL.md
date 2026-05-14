@@ -22,6 +22,7 @@ Locate and read all of the following sources for the target IP:
 | Module docs | `./doc/<module>.md` | Per-module interface and functional description |
 | Top-level skeleton | `./rtl/<ip_name>_top.v` | Top-level ports and inter-module wiring |
 | Library module docs | `./lib/**/<module>.md` | Reused library module documentation |
+| Synthesis report | `./synth/<ip_name>/synth_report.md` | Utilization, Fmax, and power (optional) |
 
 Build a list of all submodules in the IP from the top-level skeleton.
 
@@ -77,6 +78,21 @@ Do not copy the full module doc verbatim — summarize to the level useful for I
 - Instantiation example of the top-level module with all ports connected
 - Parameter descriptions and recommended values
 - Any constraints or requirements for correct operation (clock frequency, reset sequence, interface protocol)
+
+#### 7. Synthesis Results _(include only if `./synth/<ip_name>/synth_report.md` exists)_
+
+Pull all values directly from `synth/<ip_name>/synth_report.md`. Do not modify or re-interpret the numbers.
+
+Include:
+
+- **Configuration table**: target part, clock constraint, synthesis mode, date
+- **Resource utilization table**: LUT, FF, BRAM, DSP (used / available / %)
+- **Timing summary table**: clock period, WNS, TNS, Fmax, PASS/FAIL status
+- **Power estimate table**: Dynamic, Static, Total
+- **Synthesis warnings**: list notable warnings, or state "None"
+- A note at the bottom: `Full synthesis artifacts: synth/<ip_name>/`
+
+If the synthesis report is absent, omit this section entirely — do not add a placeholder or note its absence.
 
 ### Writing Rules
 

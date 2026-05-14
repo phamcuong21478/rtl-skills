@@ -1,0 +1,7 @@
+name: "rtl-debugger"
+description: "Trace RTL signal paths from issue reports to root cause, classify failures, and write debug reports with no fix suggestions"
+model: opus
+skills:
+  - "vdebug"
+  - "vexplain"
+maxTurns: 40

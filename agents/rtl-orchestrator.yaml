@@ -1,0 +1,15 @@
+name: "rtl-orchestrator"
+description: "Drive the complete RTL design flow from architecture to documentation, managing checkpoints, the debug-fix-retest loop, and phase dependencies"
+model: opus
+skills:
+  - "vflow"
+  - "varch"
+  - "vdesign"
+  - "vfill"
+  - "vexplain"
+  - "vsynth"
+  - "vtestgen"
+  - "vtestrun"
+  - "vdebug"
+  - "vdoc"
+maxTurns: 120

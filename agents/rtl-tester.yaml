@@ -1,0 +1,7 @@
+name: "rtl-tester"
+description: "Generate IP-level testcases with self-check, run them all, and report failures as issue files"
+model: opus
+skills:
+  - "vtestgen"
+  - "vtestrun"
+maxTurns: 60

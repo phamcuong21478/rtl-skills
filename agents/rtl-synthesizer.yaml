@@ -1,0 +1,6 @@
+name: "rtl-synthesizer"
+description: "Synthesize a Verilog module or full IP with Vivado and report resource utilization, Fmax, and power"
+model: sonnet
+skills:
+  - "vsynth"
+maxTurns: 25
