@@ -2,7 +2,6 @@
 name: vfill
 description: Implement Verilog code from an approved design proposal, then lint and simulate
 effort: medium
-model: opus
 allowed-tools: Read, Write, Bash, Grep
 ---
 
@@ -42,7 +41,7 @@ uses for completion, CodingStyle §18):
 | State | Detect | Action |
 |-------|--------|--------|
 | **Backbone** | `//@` markers present | First run — implement, then convert every `//@` away. |
-| **Already filled** | no `//@` left / real logic present | Filled before: do not re-fill from scratch. Make the requested change as an incremental edit, **update the proposal notes in place rather than appending a duplicate**, then re-lint and re-simulate. |
+| **Already filled** | no `//@` left / real logic present | Filled before: do not re-fill from scratch. Make the requested change as an incremental edit, **update the proposal's `## Implementation Notes (vfill)` section in place rather than appending a duplicate**, then re-lint and re-simulate. |
 
 ## Step 1 - Fill in the Verilog Code
 
@@ -50,6 +49,11 @@ Complete the target Verilog source file based on:
 
 - The approved proposal file
 - The coding style rules defined in `.claude/skills/shared/CodingStyle.md`
+- The design patterns in `.claude/skills/shared/DesignPatterns.md` — when the
+  proposal names a pattern (or the backbone is clearly shaped like one of those
+  indexed there), build that pattern's canonical shape and honor its **Ruling**
+  rather than picking a different valid shape. Adapt the names, widths, and reset
+  scope to this module.
 
 The filled file is synthesizable RTL, so it must be **plain Verilog-2005 (IEEE
 1364-2005) only — no SystemVerilog constructs** (CodingStyle §0), and must carry
@@ -65,8 +69,9 @@ Do not read RTL code unless additional information is required to understand the
 
 After completing the Verilog code:
 
-1. Record the design updates and important notes in the proposal file. This information will help understand the module's functionality and behavior, and can be used during the debugging phase.
-2. Convert all `//@` annotations to regular `//` comments.
+1. Record the design updates and important notes in the proposal's `## Implementation Notes (vfill)` section (seeded empty by `vdesign`; add the section if an older proposal lacks it). Write inside this section only, updating in place on re-runs — `vdesign`'s re-run safety check detects a filled module by this section having content. This information will help understand the module's functionality and behavior, and can be used during the debugging phase.
+2. **True up the module doc.** `doc/<module>.md` was written by `vdesign` with *intended* values; if the implementation deviated — actual latency or pipeline depth, a reset value, a protocol detail, a register field or access type — update the affected sections (`ModuleDocContract`, esp. Timing §6 and Register Map §9) to the **as-built** behavior. The doc's whole purpose is to be used instead of reading the RTL; a doc that still describes the intent after the implementation drifted silently breaks every downstream consumer (`vassert`, `vtestgen`, `vveri`, `vdoc`, `vpackage`). No deviation → no edit.
+3. Convert all `//@` annotations to regular `//` comments.
 
 ## Step 2 - Clean the Code
 
@@ -199,6 +204,7 @@ relies on:
 - [ ] Both lint passes clean; any surviving warning has a paired narrow waiver.
 - [ ] Simulation passes every scenario; `./tb/<module_name>/run.sh` reproduces the run.
 - [ ] Proposal notes updated once (not duplicated — see Re-run Safety).
+- [ ] `doc/<module>.md` matches the **as-built** behavior — latency, reset values, register map — updated wherever the implementation deviated from the proposal.
 
 If a tool was unavailable, report which check could not run — don't mark it passed.
 

@@ -2,7 +2,6 @@
 name: vexplain
 description: Generate documentation for any RTL module from Verilog source files
 effort: medium
-model: opus
 allowed-tools: Read, Write, Grep, Glob
 ---
 
@@ -75,13 +74,23 @@ Output file rules:
 ## Step 2 - Required and Excluded Content
 
 The generated documentation must follow the module documentation contract defined
-in `.claude/skills/shared/ModuleDocContract.md`, including its Excluded Content
-rules.
+in `.claude/skills/shared/ModuleDocContract.md` — **every required section,
+§1–§11**, plus its Excluded Content rules.
 
-Populate every required section of that contract by reading the Verilog source:
-extract the port table (name, direction, width, reset value) and parameters
-directly from the module declaration, and derive reset behavior, timing
-characteristics, and any FSM/algorithm from the implemented logic.
+Each section's facts live in a specific place in the RTL — extract them from
+there, never assume:
+
+| Contract section | Extract from |
+|---|---|
+| §2 Parameters | the `#(...)` declaration for the actual defaults. Legal ranges and cross-parameter constraints: derive from how each parameter is *used* (`$clog2`, part-selects, replication — a bus sliced as `[i*8 +: 8]` implies a multiple-of-8 width). If a range cannot be inferred from the code, state the default as the only verified value — do not invent a range. |
+| §3 Ports | the module declaration verbatim; each output's Reset Value from the reset branch of the `always` block that drives it. |
+| §4 Interface Protocol | the handshake logic itself: what gates a transfer (`valid && ready`), whether outputs are registered or combinational relative to inputs, who may deassert what. Build the **example-transaction cycle table** by walking one real transaction through the implemented logic — including a stalled/back-pressured beat. |
+| §5 Reset Behavior | the reset compare (`rst_n == RS_LV` / `!rst_n`) and every assignment in the reset branch; note registers deliberately *not* reset (qualified-by-valid datapath regs, `CodingStyle §5`/`§14`). |
+| §6 Timing | count the actual register stages from input to output (`_ff` registers, `s0_`/`s1_` stage chains) — never copy a latency from a proposal or comment without confirming it in the logic. |
+| §7/§8 Functional / FSM | the implemented behavior; FSM states from the `localparam` state encodings and the `case` transition logic, drawn as a mermaid `stateDiagram-v2`. |
+| §9 Register Map | the **address decode** — the `case (addr)` / `if (addr == ...)` in the write path and the read mux. Access type from the logic, not naming: write-decoded + readable = `RW`; read-mux-only = `RO`; write-decoded only = `WO`; self-clears on a read = `RC`; cleared by writing 1 = `W1C`. Reset values from the reset branch; word-vs-byte addressing from how the address is compared/shifted. |
+| §10 Usage Constraints | the guards the logic silently *assumes*: a config register sampled only in the IDLE state implies "configure before starting"; an input used without a holding register implies a stability requirement; the overflow/illegal-input paths show what is saturated, wrapped, dropped, or flagged. |
+| §11 Instantiation Template | the module declaration — mechanical; every port named, parameters at their declared defaults. |
 
 ## Step 3 - Self-check the Document
 
@@ -96,6 +105,9 @@ source. Walk each port and parameter and confirm:
 | Reset values consistent | Each output's Reset Value column agrees with the reset logic in the RTL and with the Reset Behavior section (`§3`, `§5`). |
 | Reset convention | Reset is described as synchronous, active level stated against `RS_LV` where applicable (`§5`). |
 | Timing derived from RTL | Latency, pipeline depth, and throughput match the implemented register stages, not assumptions (`§6`). |
+| Register map complete | Every CPU-accessible register in the RTL address decode appears in the Register Map (`§9`) with its address, access type (`W1C`/`RC` marked explicitly), and reset value; word/byte addressing stated. Section omitted only if the module has no registers. |
+| Template instantiates | The Instantiation Template (`§11`) matches the module declaration exactly — every port named, every parameter at its declared default. |
+| Constraints captured | Sequencing rules, input-stability assumptions, and error/boundary behavior visible in the RTL are stated in Usage Constraints (`§10`), or the section says "none" in one line. |
 | Submodules linked, not duplicated | Documented submodules are referenced by link; none re-documented inline (Excluded Content). |
 | No excluded content | No line-by-line code walkthrough or implementation internals (Excluded Content). |
 

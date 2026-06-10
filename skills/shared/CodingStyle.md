@@ -426,6 +426,24 @@ These prevent bugs — a reviewer should block a merge that violates them.
   `parameter`/`localparam`; size bit-width literals (`8'd0`, not `0`) wherever
   the inferred width is not obvious. Width-inferred `'d0` / `'b0` in reset and
   assignment contexts is fine — there the LHS sets the width (see §5).
+- **Never let a clear race the capture of a non-repeating event.** When a *one-shot*
+  event — a single-cycle pulse or one edge — is latched into a state bit that some
+  other agent can clear, a clear that lands on the same cycle as the set destroys the
+  event **permanently**, because a one-shot source never fires again. (Contrast an
+  *idempotent* source: a level missed on one cycle is still asserted the next, so there
+  is no race — this is why levels are safe and one-shots are not.) It is one hazard with
+  many faces: a write-1-to-clear **pending-interrupt** bit vs. a new IRQ edge (the
+  classic *lost interrupt*); a **sticky error/status** bit vs. its clear; a pulse/req
+  captured across a **req-ack handshake** vs. the ack-clear; and the sneakiest, a
+  **clear-on-read** "done"/event flag *polled by reading* — the read itself is the
+  racing clear, so it is not even a visible write, and the poll hangs forever. Fix it at
+  one of two layers: **(1)** in the latch, give the **set (event capture) priority over
+  the clear**, so a coincident clear only *defers* and never drops the event (this is
+  exactly the W1C interrupt-controller rule); and/or **(2)** capture the event into, and
+  expose, the underlying **level**, and let consumers sample that. Reserve clear-on-read
+  / W1C one-shots for events where a miss is acceptable; never make the *only* signal of
+  a must-not-miss event a racy one-shot. (The sticky/W1C latch and a worked example are
+  `DesignPatterns.md` P5.)
 
 ## 15. Clock-domain crossing (CDC)
 

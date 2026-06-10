@@ -1,7 +1,6 @@
 ---
 name: vdesign
 description: Generate a design proposal, documentation, and RTL backbone from a requirement file
-model: opus
 allowed-tools: Read, Write, Grep
 ---
 
@@ -29,12 +28,24 @@ Example:
 
 Use this module name consistently for the proposal, documentation, and RTL backbone file names below.
 
+### Preconditions
+
+Two stop conditions, checked before anything is written:
+
+- **Requirement file missing.** `./ddoc/<module>_req.md` does not exist → stop and
+  report: run `varch` first (or place a hand-written requirement file). Never
+  design from a module name alone.
+- **Target is the IP top.** The module name resolves to `<ip>_top` → refuse. The
+  top-level integration skeleton is owned by `varch` (it has no `_req.md`, and its
+  `//@` are integration notes, not fill directions); `vdesign` generates submodule
+  backbones only.
+
 ### Before You Start — Re-run Safety
 
 `vdesign` overwrites three artifacts. Two of them carry hand-owned downstream content once the flow has progressed past `vfill`:
 
 - `rtl/<module>.v` — after `vfill`, this holds the real implementation and **every `//@` marker has been converted away**. A blind re-generate destroys the implementation.
-- `ddoc/<module>_proposal.md` — `vfill` appends design updates and debug notes here. A blind re-generate clobbers them.
+- `ddoc/<module>_proposal.md` — `vfill` records design updates and debug notes in its `## Implementation Notes (vfill)` section (seeded empty in Step 2). A blind re-generate clobbers them.
 
 So before writing anything, classify the current state of the backbone:
 
@@ -42,7 +53,7 @@ So before writing anything, classify the current state of the backbone:
 |-------|---------------|--------|
 | **Fresh** | `rtl/<module>.v` does not exist | Generate all three outputs normally. |
 | **Backbone only** | `rtl/<module>.v` exists and still contains `//@` markers, no real logic | Safe to regenerate — the requirement changed and nothing downstream depends on it yet. |
-| **Filled** | `rtl/<module>.v` has no `//@` markers (the same marker `vflow` uses to detect completion, CodingStyle §18) / contains implemented logic, or the proposal carries vfill notes | **Stop and confirm with the user before overwriting.** Re-running discards `vfill`'s implementation and notes. The safe path is to re-run `vdesign` *before* `vfill`; after that, requirement changes must be reconciled into the filled RTL by hand. |
+| **Filled** | `rtl/<module>.v` has no `//@` markers (the same marker `vflow` uses to detect completion, CodingStyle §18) / contains implemented logic, or the proposal's `## Implementation Notes (vfill)` section has content | **Stop and confirm with the user before overwriting.** Re-running discards `vfill`'s implementation and notes. The safe path is to re-run `vdesign` *before* `vfill`; after that, requirement changes must be reconciled into the filled RTL by hand. |
 
 This mirrors how `varch` guards `<ip>_top.v` against clobbering integration edits.
 
@@ -69,14 +80,82 @@ Based on the requirements, generate a design proposal. The proposal must include
 
 - Functional description of the module, consistent with the requirement's functional section
 - Port list with signal names, directions, and widths — **taken verbatim from the requirement's structural port table**
-- Parameter list with names and defaults — **taken verbatim from the requirement's structural parameter table** (including `RS_LV` for a clocked module)
+- Parameter list with names, defaults, and **legal ranges** — names and defaults **taken verbatim from the requirement's structural parameter table** (including `RS_LV` for a clocked module); the legal range is a design decision made here (it feeds the doc's Parameters table, `ModuleDocContract §2`, and ultimately the release datasheet)
 - Algorithm description, if applicable
-- Module architecture description, if the design is large, complex, or algorithmically non-trivial
-- Intended timing — latency from input to output, pipeline depth, and throughput, if applicable (the doc's mandatory Timing Characteristics section is derived from this; see Step 2)
+- **Micro-architecture design** — the heart of the proposal; which artifacts are mandatory depends on what the module contains (see "Micro-architecture design" below)
+- **Intended timing — mandatory for every clocked module**: latency from input to output, pipeline depth, and throughput. If there is no fixed latency, state that explicitly (e.g. "handshake-bound, no fixed latency") rather than omitting the section — `vassert`'s Latency/Throughput properties and the doc's mandatory Timing Characteristics section (`ModuleDocContract §6`) are both derived from this. A purely combinational module states "combinational".
 
-Algorithm flow diagrams, Architecture diagrams, FSM state diagrams must be written in mermaid format, if applicable.
+### Pattern scan (do this before finalizing the architecture)
 
-If the design is small or simple, the architecture description may be omitted.
+Run an explicit two-part scan against `.claude/skills/shared/DesignPatterns.md` —
+recognition is the weak link, so make it a deliberate pass, not incidental
+noticing:
+
+1. **Feature scan.** For each pattern, read its **Recognize when** line against the
+   requirement's functional section. These are phrased in requirement/symptom
+   language (back-pressure, arbitration, occupancy, configuration registers, …) so
+   the match is keyword-level. A requirement may hit several.
+2. **Reflex scan.** Walk the **Reflex triggers** table against the architecture you
+   are *about to choose*. These patterns (P4, P8, P9, P10, P6, P7, P12) fire from a
+   structural commitment you make — a RAM, a pipeline, a bus, an array port — not
+   from anything the requirement says, so they are the ones silently missed. The
+   moment you decide to put state in a RAM, the preclear (P4) and read-during-write
+   (P8) checks become mandatory.
+
+For every hit, shape the architecture after the matching pattern and **name the
+pattern in the proposal's architecture section** (e.g. "the per-id count RAM needs
+P4 preclear + P8 forwarding"; "buffer the output with `vb_stream_fifo`, P1"). This
+keeps related modules consistent and tells `vfill` which idiom to implement. Be
+precise — match a pattern only when its discriminator actually holds (don't add a
+buffer where always-ready upstream is fine). Do not paste the pattern's code into the
+proposal — reference it by name; the actual widths and reset scope are derived per
+module.
+
+### Using library modules inside the design
+
+A pattern hit (or the architecture itself) often calls for a standard building
+block — a stream FIFO, a synchronizer, a dual-port RAM. Before designing one from
+scratch, check `./lib` for a module that already provides it (the same
+reuse-first rule `varch` applies at the IP level):
+
+- Take its ports and parameters **verbatim from its `<module>.md` documentation**
+  (the doc follows `ModuleDocContract` and is usable without reading the RTL; fall
+  back to the source only if the doc lacks them). Never invent, rename, or
+  re-width a library port; bind only the parameters it actually declares.
+- **Record the reuse in the proposal's architecture section** (library path +
+  instance role), so `vfill` and the debuggers know the block is library code and
+  do not re-derive or re-implement it.
+- The instantiation goes **into the backbone as structural code** (Step 3), not
+  into a `//@` marker — wiring a known, fixed interface is a design decision made
+  here; leaving it to `vfill` forces a re-derivation of the same interface.
+
+### Micro-architecture design (the heart of the proposal)
+
+The proposal is a *design*, not a restatement of the requirement: every decision
+`vfill` would otherwise have to make while implementing is made **here**, where it
+can be reviewed. Which artifacts are mandatory depends on what the module
+contains — detect, then design:
+
+| The module has… | Then the proposal must carry |
+|---|---|
+| more than one internal block or stage | **Datapath & control diagram** (mermaid): the internal blocks, the signals between them named per `CodingStyle §3` (`s0_`/`s1_` stage prefixes, `_ff` registers), and which part is control vs datapath |
+| control sequencing (modes, multi-step transactions, protocol handling) | **FSM design**: the state list with a one-line meaning each; the encoding choice (`localparam` binary / one-hot — and why); the reset state; a transition table or mermaid `stateDiagram-v2` covering every documented stimulus, including the error/abort paths; Moore vs Mealy per output; recovery from an illegal state (the mandatory `default:`) |
+| latency > 1 cycle | **Pipeline table** — one row per stage: stage name (`s0`/`s1`/…), the registers it owns (named), the computation it performs, its valid qualifier, and its behavior on stall/bubble. The rows must sum to the `## Timing` latency. State the back-pressure strategy (full-pipe stall vs skid/elastic buffer) and the pattern it follows |
+| internal state | **Storage inventory**: every register, counter, and RAM with its width, reset value (or "no reset, qualified by valid" per `CodingStyle §5`/`§14`), and the reflex-pattern rulings that apply (P4 preclear, P8 read-during-write, …) |
+| a non-obvious choice (algorithm variant, encoding, RAM vs FF array, single- vs multi-cycle) | **Decision note**: one or two sentences — the choice, the alternative rejected, and why |
+
+All diagrams (architecture, FSM state, algorithm flow) are written in mermaid format.
+
+A module with none of the above — pure combinational glue, a trivial register
+slice — may compress the architecture section to a paragraph. **Omission is
+allowed only when there is genuinely nothing to decide, never because the design
+is merely unwritten.**
+
+**The backbone mirrors the micro-architecture (Step 3).** Each diagram block /
+pipeline stage becomes a section banner; the `//@` markers name the proposal's
+states and stages (e.g. `//@ implement the IDLE→LOAD→RUN→DRAIN FSM from the
+proposal, one-hot, default: recover to IDLE`), so `vfill` implements the
+*designed* FSM and pipeline rather than inventing its own.
 
 ## Step 2 - Generate Proposal and Documentation Files
 
@@ -95,6 +174,26 @@ Output file rules:
 Example:
 
 - requirement `foo_req.md` → `./ddoc/foo_proposal.md`
+
+#### Proposal sections
+
+The proposal carries these sections in order (omitting only the ones Step 1 marks
+optional): `## Function Description`, `## Ports`, `## Parameters` (with legal
+ranges), `## Architecture` (the micro-architecture artifacts from Step 1 —
+datapath/control diagram, FSM design, pipeline table, storage inventory, decision
+notes — naming any matched patterns and reused lib modules), `## Algorithm`,
+`## Timing`, and — always last — an empty seed:
+
+```markdown
+## Implementation Notes (vfill)
+
+<!-- vfill records design updates and debug notes here, updating in place. -->
+```
+
+The seed is the contract that keeps re-runs safe: `vfill` writes its notes
+**inside this section only**, updating in place rather than appending duplicates,
+so "has vfill touched this proposal?" reduces to one check — whether the section
+has content (the Re-run Safety table above relies on it).
 
 ### Design Documentation File
 
@@ -123,6 +222,13 @@ not yet decided, state the intended value from the proposal rather than leaving
 it blank. The reset section must reflect the project convention: synchronous
 reset, `rst_n` compared against `RS_LV` (default active-low).
 
+For a register-bearing module, the Register Map (`ModuleDocContract §9`) is
+**designed here**: addresses, access types (`RO`/`RW`/`W1C`/`RC`), and reset
+values come from the requirement's register list plus the architecture's decode
+design — they are design decisions, not implementation details, so they must not
+be deferred to `vfill`. The Instantiation Template (`§11`) binds every parameter
+to the default from the structural parameter table.
+
 ## Step 3 - Create Backbone RTL Module
 
 Create a skeleton Verilog file in the `./rtl` folder.
@@ -142,14 +248,22 @@ This skill generates backbones for submodules only. The top-level integration sk
 
 The backbone must be **style-compliant from the start** — `vfill` fills it in
 place, so the scaffold must already match `.claude/skills/shared/CodingStyle.md`,
-not just the empty-logic shape. It must include:
+not just the empty-logic shape. When the proposal names a design pattern (Step 1),
+lay the section dividers and `//@` markers out after that pattern's canonical
+shape in `.claude/skills/shared/DesignPatterns.md`, keeping the markers
+plain-English (no code, `CodingStyle §18`). It must include:
 
+- Plain **Verilog-2005 only** (`CodingStyle §0`) — the backbone *is* the future
+  synthesizable RTL; no SystemVerilog constructs.
 - `` `default_nettype none `` at the top and `` `default_nettype wire `` at the end (`CodingStyle §14`).
 - Module declaration with all ports from the proposal, ANSI style, with `//!` Doxygen doc-comments on every port and parameter (`CodingStyle §1`, `§10`).
 - `RS_LV` as the **last parameter** of the (clocked) module, default `0` (`CodingStyle §1`, `§12`).
 - `//@` direction comments that guide `vfill` on what to implement in each section.
 - Section dividers using the standard banner format, indented to body level (4 spaces) (`CodingStyle §4`).
-- Empty logic bodies — no implementation.
+- Empty logic bodies — no implementation. The one exception is **structural code
+  for a reused library module** (Step 1): instantiate it here with named port
+  connections (`CodingStyle §9`), its interface taken verbatim from the lib doc;
+  any glue logic *around* it stays a `//@` direction for `vfill`.
 
 Port and signal naming follows `CodingStyle §3` (do not re-derive a partial copy
 of those rules here): `s_`/`m_` interface prefixes, `_ff` for flip-flops,
@@ -205,10 +319,26 @@ each port and parameter of the module and confirm:
 |-------|----------------|
 | Ports & params match the requirement | Every port and parameter in the backbone header matches the requirement's structural tables by name, width/default, and direction. None added, dropped, renamed, re-widthed, or re-defaulted (a needed-but-missing one is an architecture change — see Step 1). |
 | Proposal agrees | The proposal's port and parameter lists are identical to the backbone header. |
-| Doc agrees | The doc's Ports table (`ModuleDocContract §3`) and Parameters table (`§2`) list the same ports and parameters with the same widths, directions, and defaults. |
+| Doc agrees | The doc's Ports table (`ModuleDocContract §3`) and Parameters table (`§2`) list the same ports and parameters with the same widths, directions, defaults, and legal ranges. |
 | Conventions hold | `clk`, `rst_n` are the first two ports; `RS_LV` is the last parameter (default 0) for a clocked module; reset is described as synchronous against `RS_LV`. |
+| Timing stated | For a clocked module, the proposal carries an explicit `## Timing` section (latency / pipeline depth / throughput, or an explicit no-fixed-latency statement) and the doc's Timing Characteristics (`§6`) matches it. |
+| Micro-architecture complete | Every artifact the Step 1 content table mandates for this module is present: the FSM transition table covers every documented stimulus and has a reset + `default:` recovery state; the pipeline rows sum to the `## Timing` latency; the storage inventory covers every register the `//@` markers name. |
+| Backbone mirrors the design | The backbone's section banners correspond to the proposal's blocks/stages, and FSM/pipeline `//@` markers name the proposal's states and stages — no marker asks `vfill` to make a design decision the proposal already made (or should have made). |
+| Lib interfaces verbatim | Every library-module instantiation in the backbone matches the lib module's doc by port name, width, and declared parameters; the reuse is recorded in the proposal's architecture section. |
 | Markers legal | Every `//@` in the backbone is plain-English intent with no Verilog code, one direction per line (`CodingStyle §18`). |
+| vfill seed present | The proposal ends with the empty `## Implementation Notes (vfill)` section. |
 | Functional fidelity | The doc and proposal functional descriptions are consistent with the requirement's hand-owned `## Functional Description`. |
 
 If any check fails, fix the offending artifact and re-run the check — do not leave
 the proposal, the documentation, and the backbone in disagreement.
+
+## Known Issues and Fixes
+
+This section records issues encountered when running this skill and how they were resolved. Use it to avoid repeating the same mistakes — missed pattern matches and interface drift belong here.
+
+<!-- Add entries below as issues are discovered. Format:
+### <short issue title>
+**Symptom:** what was observed
+**Cause:** root cause
+**Fix:** what was done to resolve it
+-->

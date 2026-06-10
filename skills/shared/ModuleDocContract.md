@@ -29,6 +29,10 @@ A table. Omit the section only if the module has no parameters.
 
 - `Default` must be the actual default value in the module declaration.
 - `Legal Range` states the values the design supports (e.g. `1–32`, `power of 2`).
+- If parameters constrain **each other** (e.g. `DEPTH` must be a power of 2;
+  `DATA_W` a multiple of 8 when `BYTE_EN=1`), state the cross-parameter
+  constraints in a line below the table — a per-parameter range cannot express
+  them.
 
 ### 3. Ports
 
@@ -53,6 +57,12 @@ For each bus or handshake interface, describe how to drive or sample it:
 
 For a module with only trivial standalone signals (no handshake), state that
 explicitly in one line rather than omitting the section.
+
+For any **non-trivial handshake** (anything beyond a single always-accepted
+valid), include an **example transaction** as a beat-by-beat cycle table — one
+row per cycle, one column per interface signal — covering at least one normal
+beat and one stalled/back-pressured beat. Prose states the rule; the table
+removes the ambiguity prose hides.
 
 ### 5. Reset Behavior
 
@@ -81,6 +91,68 @@ For algorithmically non-trivial modules or any module with an FSM, include:
 
 - A basic algorithm description.
 - FSM state diagram and/or algorithm flow drawn in **mermaid** format.
+
+### 9. Register Map _(if applicable)_
+
+For any module exposing CPU-accessible registers (a CSR block, any
+bus-controlled module). Omit the section only if the module has no registers.
+
+A table covering **every** register:
+
+| Address | Name | Access | Reset | Description |
+|---------|------|--------|-------|-------------|
+
+- `Access` is `RO` / `RW` / `WO` / `W1C` / `RC` (read-to-clear). **Mark `W1C`/`RC`
+  explicitly** — clear-on-read/-write bits carry the one-shot poll hazard
+  (`CodingStyle §14`) and an integrator must know which bits self-clear *before*
+  polling them.
+- State whether addresses are **word** or **byte** addresses on the module's
+  native bus.
+- For a register with multiple fields, add a per-register bit-field table
+  (bits, field name, access, reset, meaning).
+
+This section is the source the bench reg-maps (`vtestgen`'s `dut.vh`, `vveri`'s
+`register.h`) and the release `register_reference.md` derive from. If it is
+missing, those skills fall back to reading the RTL address decode — exactly what
+this contract exists to prevent.
+
+### 10. Usage Constraints _(if applicable)_
+
+Integration rules an integrator cannot see in the port table:
+
+- **Sequencing rules** — e.g. "configure before setting `ENA`; do not change
+  `MODE` while busy"; required idle cycles between operations.
+- **Input stability assumptions** — e.g. "`s_data` must hold while
+  `s_valid && !s_ready`" (if it is the standard valid/ready rule, say so in one
+  line).
+- **Behavior on documented error / boundary conditions** — overflow, underflow,
+  illegal input, protocol violation: what the module guarantees, drops, or
+  flags.
+
+When in doubt, "No usage constraints beyond the standard handshake" is a
+one-line statement, not an omitted section.
+
+### 11. Instantiation Template
+
+A copy-paste Verilog instantiation with **named port connections**
+(`CodingStyle §9`) and every parameter bound to its default:
+
+```verilog
+foo #(
+    .DATA_W (8),
+    .RS_LV  (0)
+) u_foo (
+    .clk     (clk),
+    .rst_n   (rst_n),
+    .s_data  (/* [DATA_W-1:0] in */),
+    .s_valid (/* in */),
+    .m_data  (/* [DATA_W-1:0] out */),
+    .m_valid (/* out */)
+);
+```
+
+Names, widths, and parameters must match §2/§3 exactly — this is the first thing
+an integrator copies, and a drifted template is worse than none.
 
 ## Excluded Content
 

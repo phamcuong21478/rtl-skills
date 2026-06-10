@@ -1,7 +1,6 @@
 ---
 name: varch
 description: Decompose an IP requirement into submodules, define interfaces, and generate an architecture document plus per-module requirement files and a top-level skeleton
-model: opus
 allowed-tools: Read, Write, Glob, Grep
 ---
 
